@@ -7,6 +7,8 @@ import (
 	"time"
 	"os"
 	"bufio"
+	"sync"
+	//"math/rand"
 )
 
 func Clear(){
@@ -16,57 +18,81 @@ func Clear(){
 }
 
 func InitScene() (*raymarch.Camera, *raymarch.Scene){
+	//var numHills = 30;
+
 	var sphere1 = raymarch.Sphere{raymarch.Vector3{0, 0.5, -9}, 0.5}
 	var sphere2 = raymarch.Sphere{raymarch.Vector3{-3, 0.5, -3}, 0.5}
 	var sphere3 = raymarch.Sphere{raymarch.Vector3{2, 0.5, -5}, 0.5}
 
 	var plane = raymarch.Plane{raymarch.Vector3{}, raymarch.Vector3{0, 1, 0}.Normalised()}
 
-	var wall1 = raymarch.MakeParalelipiped(raymarch.Vector3{-0.85, 0.0, -2}, raymarch.Vector3{0.2, 0, 0},  raymarch.Vector3{0, 1, 0}, raymarch.Vector3{0, 0, -6})
-	var wall2 = raymarch.MakeParalelipiped(raymarch.Vector3{0.65, 0.0, -2}, raymarch.Vector3{0.2, 0, 0},  raymarch.Vector3{0, 1, 0}, raymarch.Vector3{0, 0, -6})
-	var roof = raymarch.MakeParalelipiped(raymarch.Vector3{-0.85, 1.0, -2}, raymarch.Vector3{1.7, 0, 0},  raymarch.Vector3{0, 0.2, 0}, raymarch.Vector3{0, 0, -6})
+	var sunLight = raymarch.SunLight{ raymarch.Vector3{-1, -1, -1}, 0.2}
+	var skyLight = raymarch.SunLight{ raymarch.Vector3{1, -1, 1}, 0.2}
+	var pointLight = raymarch.PointLight{raymarch.Vector3{0, 3, 0}, 5.0}
+	var lights = [](raymarch.Light){&sunLight, &skyLight, &pointLight}
 
-	var lights = [](raymarch.Light){}
-	var sunLight = raymarch.SunLight{ raymarch.Vector3{-1, -1, -1}, 0.3}
-
-	lights = append(lights, &sunLight)
-	lights = append(lights, raymarch.PointLight{raymarch.Vector3{0, 0.5, -5}, 1.0})
-	for i := 0; i < 3; i++ {
-		var light1 = raymarch.PointLight{ raymarch.Vector3{-1.5, 0.8, float64(-2 - 2 * i)}, 2}
-		var light2 = raymarch.PointLight{ raymarch.Vector3{1.5, 0.8, float64(-2 - 2 * i)}, 2}
-		lights = append(lights, &light1)
-		lights = append(lights, &light2)
-	}
+	var doorFrame = raymarch.MakeDoorFrame(raymarch.Vector3{}, raymarch.Vector3{0, 0, 1}, 0.5, 0.8, 0.05)
+	var geom = []raymarch.Geometry{&plane, &sphere1, &sphere2, &sphere3, doorFrame}
 
 	var camera = raymarch.Camera{raymarch.Vector3{0, 0.5, 2}, raymarch.Vector3{0, 0, -1}.Normalised(), raymarch.Vector3{0, 1, 0}, math.Pi / 3}
 	var scene = raymarch.Scene{
 		&camera, 
-		[](raymarch.Geometry){ &plane, &sphere1, &sphere2, &sphere3, &wall1, &wall2, roof}, 
+		geom, 
 		lights}
    	return &camera, &scene
 }
 
 func Draw(scene *raymarch.Scene){
-	var intensityChars = []string{" ", ".", "~", ":", "o", "+", "#", "@"}
+	var intensityChars = []string{" ", ".", ":", "*", "o", "?", "8"}
 	var pixAspectRatio float64 = 2
 	var resX, resY = 180, 80
     var marcher = raymarch.Raymarcher{1, 50.0, 0.01}
     var screenIntensities = make([]float64, resX * resY)
-    var clipIntensity float64 = 3
-    for x := 0; x < resX; x++ {
-    	for y := 0; y < resY; y++ {
-    		var xSS = 2 * float64(x) / float64(resX) - 1
-    		var ySS = pixAspectRatio * (2 * (float64(y) + float64(resX - resY) / 2) / (float64(resX)) - 1)
-    		var screenPos = raymarch.Vector3{xSS, ySS, 0}
-    		var intensity = math.Min(clipIntensity, math.Log(1 + marcher.BlinnPhong(screenPos, scene, 0.1)))
-    		screenIntensities[x + resX * y] = intensity
-    	}
-    }
+    var numDrawThreads = 32
+    var waitGroup sync.WaitGroup
 	
+	drawWorker := func(n int){
+		for x := n; x < resX; x += numDrawThreads {
+	    	for y := 0; y < resY; y++ {
+	    		var xSS = 2 * float64(x) / float64(resX) - 1
+	    		var ySS = pixAspectRatio * (2 * (float64(y) + float64(resX - resY) / 2) / (float64(resX)) - 1)
+	    		var screenPos = raymarch.Vector3{xSS, ySS, 0}
+	    		var hit, intensity = marcher.BlinnPhong(screenPos, scene, 4.0)
+	    		if hit{
+	    			screenIntensities[x + resX * y] = intensity
+	    		} else {
+	    			screenIntensities[x + resX * y] = -1
+	    		}
+	    	}
+		}
+		waitGroup.Done()
+	}
+
+	for n := 0; n < numDrawThreads; n++{
+		waitGroup.Add(1)
+		go drawWorker(n)
+	}
+
+	waitGroup.Wait()
+
+	var maxIntensity = 0.0
+	var minIntensity = 10000.0
+	for i := 0; i < len(screenIntensities); i++{
+		if screenIntensities[i] < 0{
+			continue
+		}
+		maxIntensity = math.Max(screenIntensities[i], maxIntensity)
+		minIntensity = math.Min(screenIntensities[i], minIntensity)
+	}
+
    	var screenChars = make([]string, resX * resY)
    	for i := 0; i < len(screenChars); i++ {
-		var charIx = int(screenIntensities[i] * float64(len(intensityChars) - 1))
+   		var normedIntensity = (screenIntensities[i] - minIntensity) / (maxIntensity - minIntensity)
+		var charIx = int(normedIntensity * float64(len(intensityChars)))
 		charIx = raymarch.Max(0, raymarch.Min(len(intensityChars) - 1, charIx))
+   		if screenIntensities[i] < 0{
+   			charIx = 0
+   		}
 		screenChars[i] = intensityChars[charIx]
 	}
 
@@ -83,8 +109,9 @@ func Draw(scene *raymarch.Scene){
 }
 
 func ExecuteUserCommand(command rune, camera *raymarch.Camera){
-	var turnSpeed = 0.5
-	var stepSize = 1.0
+	var turnAngle = math.Pi / 24
+	var turnSpeed = math.Tan(turnAngle)
+	var stepSize = 0.25
 	switch command {
 	case 'w':
 		camera.Position = raymarch.Add(camera.Position, camera.Heading.Mul(stepSize))

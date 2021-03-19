@@ -1,7 +1,24 @@
 package raymarch
+import "math"
 
-type Vector3 struct {
-    X, Y, Z float64
+func Min(ints ...int) int{
+	var output = ints[0]
+	for _, n := range ints{
+		if n < output{
+			output = n
+		}
+	}
+	return output
+}
+
+func Max(ints ...int) int{
+	var output = ints[0]
+	for _, n := range ints{
+		if n > output{
+			output = n
+		}
+	}
+	return output
 }
 
 type Camera struct {
@@ -9,9 +26,17 @@ type Camera struct {
     FOV float64
 }
 
-type Geometry interface {
-    SurfaceDistance(pos Vector3)
-    Normal(pos Vector3)
+func (self Camera) Right() Vector3{
+	return Cross(self.Heading, self.Up).Normalised()
+}
+
+func (self Camera) GetRay(screenPos Vector3) Ray{
+	var width = math.Tan(self.FOV / 2)
+	var rayDir = Add(
+		self.Heading, 
+		self.Right().Mul(screenPos.X * width),
+		self.Up.Mul(screenPos.Y * width))
+	return Ray{self.Position, rayDir.Normalised()}
 }
 
 type Scene struct{
@@ -25,32 +50,44 @@ type Ray struct{
 
 type Raymarcher struct {
     StepSize, FarDist, ConvergeDist float64
-
 }
 
-type RayHit{
+type RayHit struct {
     Pos Vector3
-    Geom Geometry
+    Geom *Geometry
 }
 
-func (self Raymarcher) CastRay (ray Ray, scene Scene) RayHit {
-    var geometry := scene.Geom
-    var pos := ray.Pos
+func (self Raymarcher) CastRay (ray Ray, scene Scene) *RayHit {
+    var geometry = scene.Geom
+    var pos = ray.Pos
     for {
         var minDist = self.FarDist
-        for i, g in geometry {
-            var surfaceDist := g.SurfaceDistance(pos)
+        for _, g := range geometry {
+            var surfaceDist = (*g).SurfaceDistance(pos)
             if surfaceDist < self.ConvergeDist{
-                return RayHit{pos, g}
+                return &RayHit{pos, g}
             }
             if surfaceDist < minDist{
-                minDist := surfaceDist
+                minDist = surfaceDist
             }
         }
+
         if minDist == self.FarDist{
-            return null
+            return nil
         }
-        pos = pos + self.StepSize * ray.Dir * minDist
+        
+        pos = Add(pos, ray.Dir.Mul(self.StepSize * minDist))
     }
 }
 
+//Screenpos X and Y are screen-space centered at 0, 0 with min/max x and y going from -1 to 1
+func (self Raymarcher) BlinnPhong(screenPos Vector3, scene Scene, ambient float64, lightDir Vector3) float64 {
+	var ray = scene.Cam.GetRay(screenPos)
+	var rayHit = self.CastRay(ray, scene)
+	if rayHit == nil{
+		return 0.01
+	}
+	var geometry = rayHit.Geom
+	var normal = (*geometry).Normal(rayHit.Pos)
+	return ambient + (1 - ambient) * math.Max(0, Dot(normal, lightDir.Mul(-1)))
+}

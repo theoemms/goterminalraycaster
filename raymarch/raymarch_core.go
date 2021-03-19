@@ -1,5 +1,8 @@
 package raymarch
-import "math"
+import (
+	"math"
+	//"fmt"
+)
 
 func Min(ints ...int) int{
 	var output = ints[0]
@@ -40,8 +43,9 @@ func (self Camera) GetRay(screenPos Vector3) Ray{
 }
 
 type Scene struct{
-    Cam Camera
-    Geom []*Geometry
+    Cam *Camera
+    Geom []Geometry
+    Lights []Light
 }
 
 type Ray struct{
@@ -54,40 +58,49 @@ type Raymarcher struct {
 
 type RayHit struct {
     Pos Vector3
-    Geom *Geometry
+    Geom Geometry
 }
 
-func (self Raymarcher) CastRay (ray Ray, scene Scene) *RayHit {
+func (self Raymarcher) CastRay (ray Ray, scene *Scene) *RayHit {
     var geometry = scene.Geom
     var pos = ray.Pos
     for {
         var minDist = self.FarDist
+        if Sub(ray.Pos, pos).Length() >= self.FarDist{
+            return nil
+        }
+
         for _, g := range geometry {
-            var surfaceDist = (*g).SurfaceDistance(pos)
-            if surfaceDist < self.ConvergeDist{
+            var surfaceDist = g.SurfaceDistance(pos)
+            if math.Abs(surfaceDist) < self.ConvergeDist{
                 return &RayHit{pos, g}
             }
-            if surfaceDist < minDist{
-                minDist = surfaceDist
+
+            if math.Abs(surfaceDist) < minDist{
+                minDist = math.Abs(surfaceDist)
             }
         }
 
-        if minDist == self.FarDist{
-            return nil
-        }
-        
         pos = Add(pos, ray.Dir.Mul(self.StepSize * minDist))
     }
 }
 
 //Screenpos X and Y are screen-space centered at 0, 0 with min/max x and y going from -1 to 1
-func (self Raymarcher) BlinnPhong(screenPos Vector3, scene Scene, ambient float64, lightDir Vector3) float64 {
+func (self Raymarcher) BlinnPhong(screenPos Vector3, scene *Scene, ambient float64) float64 {
 	var ray = scene.Cam.GetRay(screenPos)
 	var rayHit = self.CastRay(ray, scene)
 	if rayHit == nil{
 		return 0.01
 	}
 	var geometry = rayHit.Geom
-	var normal = (*geometry).Normal(rayHit.Pos)
-	return ambient + (1 - ambient) * math.Max(0, Dot(normal, lightDir.Mul(-1)))
+	var normal = geometry.Normal(rayHit.Pos)
+
+	var intensity = ambient
+	for _, light := range scene.Lights{
+		var lightDir = light.Direction(rayHit.Pos)
+		if self.CastRay(Ray{Add(rayHit.Pos, lightDir.Mul(-2 * self.ConvergeDist)), lightDir.Mul(-1)}, scene) == nil{
+			intensity += math.Max(0, Dot(lightDir, normal.Mul(-1)) * light.Intensity(rayHit.Pos))
+		} 
+	}
+	return  intensity
 }

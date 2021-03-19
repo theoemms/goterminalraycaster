@@ -17,7 +17,7 @@ func Clear(){
 
 func InitScene() (*raymarch.Camera, *raymarch.Scene){
 	var sphere1 = raymarch.Sphere{raymarch.Vector3{0, 0.5, -9}, 0.5}
-	var sphere2 = raymarch.Sphere{raymarch.Vector3{-3, 0.5, -7}, 0.5}
+	var sphere2 = raymarch.Sphere{raymarch.Vector3{-3, 0.5, -3}, 0.5}
 	var sphere3 = raymarch.Sphere{raymarch.Vector3{2, 0.5, -5}, 0.5}
 
 	var plane = raymarch.Plane{raymarch.Vector3{}, raymarch.Vector3{0, 1, 0}.Normalised()}
@@ -27,18 +27,18 @@ func InitScene() (*raymarch.Camera, *raymarch.Scene){
 	var roof = raymarch.MakeParalelipiped(raymarch.Vector3{-0.85, 1.0, -2}, raymarch.Vector3{1.7, 0, 0},  raymarch.Vector3{0, 0.2, 0}, raymarch.Vector3{0, 0, -6})
 
 	var lights = [](raymarch.Light){}
-	var sunLight = raymarch.SunLight{ raymarch.Vector3{-1, -1, -1}, 0.2}
+	var sunLight = raymarch.SunLight{ raymarch.Vector3{-1, -1, -1}, 0.3}
 
 	lights = append(lights, &sunLight)
 	lights = append(lights, raymarch.PointLight{raymarch.Vector3{0, 0.5, -5}, 1.0})
 	for i := 0; i < 3; i++ {
-		var light1 = raymarch.PointLight{ raymarch.Vector3{-1.5, 0.8, float64(-5 - 2 * i)}, 2}
-		var light2 = raymarch.PointLight{ raymarch.Vector3{1.5, 0.8, float64(-5 - 2 * i)}, 2}
+		var light1 = raymarch.PointLight{ raymarch.Vector3{-1.5, 0.8, float64(-2 - 2 * i)}, 2}
+		var light2 = raymarch.PointLight{ raymarch.Vector3{1.5, 0.8, float64(-2 - 2 * i)}, 2}
 		lights = append(lights, &light1)
 		lights = append(lights, &light2)
 	}
 
-	var camera = raymarch.Camera{raymarch.Vector3{0, 0.5, 2}, raymarch.Vector3{0, 0, -1}, raymarch.Vector3{0, 1, 0}, math.Pi / 3}
+	var camera = raymarch.Camera{raymarch.Vector3{0, 0.5, 2}, raymarch.Vector3{0, 0, -1}.Normalised(), raymarch.Vector3{0, 1, 0}, math.Pi / 3}
 	var scene = raymarch.Scene{
 		&camera, 
 		[](raymarch.Geometry){ &plane, &sphere1, &sphere2, &sphere3, &wall1, &wall2, roof}, 
@@ -49,7 +49,7 @@ func InitScene() (*raymarch.Camera, *raymarch.Scene){
 func Draw(scene *raymarch.Scene){
 	var intensityChars = []string{" ", ".", "~", ":", "o", "+", "#", "@"}
 	var pixAspectRatio float64 = 2
-	var resX, resY = 120, 60
+	var resX, resY = 180, 80
     var marcher = raymarch.Raymarcher{1, 50.0, 0.01}
     var screenIntensities = make([]float64, resX * resY)
     var clipIntensity float64 = 3
@@ -83,7 +83,7 @@ func Draw(scene *raymarch.Scene){
 }
 
 func ExecuteUserCommand(command rune, camera *raymarch.Camera){
-	var turnSpeed = 1.0
+	var turnSpeed = 0.5
 	var stepSize = 1.0
 	switch command {
 	case 'w':

@@ -1,5 +1,6 @@
 package raymarch
 import "math"
+import "fmt"
 
 type Vector3 struct {
     X, Y, Z float64
@@ -45,4 +46,8 @@ func (self Vector3) Length() float64{
 
 func (self Vector3) Normalised() Vector3{
 	return Div(self, self.Length())
+}
+
+func (self Vector3) String() string {
+	return fmt.Sprintf("Vector3{%v, %v, %v}", self.X, self.Y, self.Z)
 }

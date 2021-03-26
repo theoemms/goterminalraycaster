@@ -4,7 +4,6 @@ import (
 	"raymarch"
 	"strings"
 	"math"
-	"time"
 	"os"
 	"bufio"
 	"sync"
@@ -31,10 +30,14 @@ func InitScene() (*raymarch.Camera, *raymarch.Scene){
 	var pointLight = raymarch.PointLight{raymarch.Vector3{0, 3, 0}, 5.0}
 	var lights = [](raymarch.Light){&sunLight, &skyLight, &pointLight}
 
-	var doorFrame = raymarch.MakeDoorFrame(raymarch.Vector3{}, raymarch.Vector3{0, 0, 1}, 0.5, 0.8, 0.05)
+	var doorFrame = raymarch.MakeParalelipiped(raymarch.Vector3{},  raymarch.Vector3{1, 0 ,0}, raymarch.Vector3{0, 1, 0}, raymarch.Vector3{0, 0, 1}) /// raymarch.MakeDoorFrame(raymarch.Vector3{}, raymarch.Vector3{0, 0, 1}, 0.5, 0.8, 0.05)
 	var geom = []raymarch.Geometry{&plane, &sphere1, &sphere2, &sphere3, doorFrame}
 
-	var camera = raymarch.Camera{raymarch.Vector3{0, 0.5, 2}, raymarch.Vector3{0, 0, -1}.Normalised(), raymarch.Vector3{0, 1, 0}, math.Pi / 3}
+
+	var cameraPos = raymarch.Vector3{-1.5783352321420754, 0.5, -0.9503353460894314}
+	var cameraHead = raymarch.Vector3{0.8660254037844384, 0, 0.5000000000000004}
+
+	var camera = raymarch.Camera{cameraPos, cameraHead, raymarch.Vector3{0, 1, 0}, math.Pi / 3}
 	var scene = raymarch.Scene{
 		&camera, 
 		geom, 
@@ -43,10 +46,10 @@ func InitScene() (*raymarch.Camera, *raymarch.Scene){
 }
 
 func Draw(scene *raymarch.Scene){
-	var intensityChars = []string{" ", ".", ":", "*", "o", "?", "8"}
+	var intensityChars = []string{" ", ".","*", ":", "?", "o", "8"}
 	var pixAspectRatio float64 = 2
 	var resX, resY = 180, 80
-    var marcher = raymarch.Raymarcher{1, 50.0, 0.01}
+    var marcher = raymarch.Raymarcher{0.5, 50.0, 0.01}
     var screenIntensities = make([]float64, resX * resY)
     var numDrawThreads = 32
     var waitGroup sync.WaitGroup
@@ -108,11 +111,13 @@ func Draw(scene *raymarch.Scene){
 	fmt.Printf(sb.String())
 }
 
-func ExecuteUserCommand(command rune, camera *raymarch.Camera){
+func ExecuteUserCommand(command rune, camera *raymarch.Camera) bool{
 	var turnAngle = math.Pi / 24
 	var turnSpeed = math.Tan(turnAngle)
 	var stepSize = 0.25
 	switch command {
+	case '\n':
+		return false;
 	case 'w':
 		camera.Position = raymarch.Add(camera.Position, camera.Heading.Mul(stepSize))
 	case 'a':
@@ -121,25 +126,21 @@ func ExecuteUserCommand(command rune, camera *raymarch.Camera){
 		camera.Position = raymarch.Add(camera.Position, camera.Heading.Mul(-stepSize))
 	case 'd':
 		camera.Heading = raymarch.Add(camera.Heading, camera.Right().Mul(turnSpeed)).Normalised()
+	case 'p':
+		fmt.Printf("pos = %s, head = %s\n", camera.Position.String(), camera.Heading.String())
+		return false;
 	}
+	return true;
 }
 
 func main() {
 	var camera, scene = InitScene()
-    var deltaTime = 0.1
-    var totalTime float64 = 0
-    
+    Draw(scene)
    	reader := bufio.NewReader(os.Stdin)
     for {
-    	var frameStartTime = time.Now()
-
-    	Draw(scene)
 		command, _, err := reader.ReadRune()
-		if err == nil{
-			ExecuteUserCommand(command, camera)
+		if err == nil && ExecuteUserCommand(command, camera){
+			Draw(scene)
 		}
-
-		deltaTime = time.Now().Sub(frameStartTime).Seconds()
-		totalTime += deltaTime
     }
 }

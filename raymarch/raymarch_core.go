@@ -4,6 +4,7 @@ import (
 	//"fmt"
 )
 
+//Need a maths utils file...
 func Min(ints ...int) int{
 	var output = ints[0]
 	for _, n := range ints{
@@ -86,21 +87,23 @@ func (self Raymarcher) CastRay (ray Ray, scene *Scene) *RayHit {
 }
 
 //Screenpos X and Y are screen-space centered at 0, 0 with min/max x and y going from -1 to 1
-func (self Raymarcher) BlinnPhong(screenPos Vector3, scene *Scene, ambient float64) float64 {
+func (self Raymarcher) BlinnPhong(screenPos Vector3, scene *Scene, fogDist float64) (bool, float64) {
 	var ray = scene.Cam.GetRay(screenPos)
 	var rayHit = self.CastRay(ray, scene)
 	if rayHit == nil{
-		return 0.01
+		return false, 0
 	}
 	var geometry = rayHit.Geom
 	var normal = geometry.Normal(rayHit.Pos)
 
-	var intensity = ambient
+	var intensity = 0.0
 	for _, light := range scene.Lights{
 		var lightDir = light.Direction(rayHit.Pos)
 		if self.CastRay(Ray{Add(rayHit.Pos, lightDir.Mul(-2 * self.ConvergeDist)), lightDir.Mul(-1)}, scene) == nil{
 			intensity += math.Max(0, Dot(lightDir, normal.Mul(-1)) * light.Intensity(rayHit.Pos))
 		} 
 	}
-	return  intensity
+
+	var dist = Sub(rayHit.Pos, scene.Cam.Position).Length()
+	return true, intensity * math.Exp(- dist / fogDist)
 }
